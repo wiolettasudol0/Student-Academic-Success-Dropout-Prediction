@@ -1,0 +1,174 @@
+---
+title: "Projekt WdAD"
+author: "Aneta Buszta, Klaudia Czarny, Wioletta Sudoł"
+date: "2025-06-21"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(readr)
+library(class)
+library(gmodels)
+library(C50) 
+library(e1071)
+```
+
+Wczytujemy nasz zbiór danych i usuwwamy kolumny GDP” oraz „Inflation rate”
+
+```{r}
+studenciki = students_data[, -c(35, 36)]
+```
+
+```{r}
+summary(studenciki)
+```
+```{r}
+str(studenciki)
+```
+....KNN........
+
+
+```{r}
+#KNN
+train_index = 1:3539 #zbiór treningowy 
+test_index = 3540:4424 #zbiór testwoy 
+
+studenciki$Target = as.factor(studenciki$Target)
+
+st_train = studenciki[train_index, -35]
+st_test = studenciki[test_index, -35] 
+
+st_train_labels = studenciki[train_index, 35]
+st_test_labels = studenciki[test_index, 35]
+```
+
+
+```{r}
+st_train_z = as.data.frame(scale(st_train)) #Standaryzacja cech
+st_test_z = as.data.frame(scale(st_test))
+```
+
+
+
+
+```{r}
+#Model 1 dla k = 5
+set.seed(123) 
+st_pred1 = knn(st_train_z, st_test_z, st_train_labels, k = 5)
+
+CrossTable(st_pred1, st_test_labels, prop.chisq = FALSE, prop.c = FALSE, prop.r = FALSE, dnn = c("Predicted", "Actual"))
+
+(accuracy_knn_z <- sum(as.numeric(st_pred1) == as.numeric(st_test_labels)) / length(st_test_labels))
+print(paste("k = ", 5, " Accuracy = ", accuracy_knn_z))
+```
+```{r}
+#testowanie różnych wartości k
+
+for (i in 1:25) {
+  set.seed(123) 
+  pred_knn <- knn(st_train_z, st_test_z, st_train_labels, k=i)
+  acc_knn <- sum(as.numeric(pred_knn) == as.numeric(st_test_labels)) / length(st_test_labels)
+  print(paste("k = ", i, " Accuracy = ", acc_knn))
+}
+```
+Wybieramy k = 13 jako najlepsze
+
+```{r}
+st_pred = knn(st_train_z, st_test_z, st_train_labels, k = 13)
+
+CrossTable(st_pred, st_test_labels, prop.chisq = FALSE, prop.c = FALSE, prop.r = FALSE, dnn = c("Predicted", "Actual"))
+
+(accuracy_knn_z <- sum(as.numeric(st_pred) == as.numeric(st_test_labels)) / length(st_test_labels))
+print(paste("k = ", 13, " Accuracy = ", accuracy_knn_z))
+```
+
+...........DRZEWA...........
+
+```{r}
+attach(studenciki)
+# Drzewa decyzyjne 
+columns_to_factor <- c("Marital.status", "Application.mode", "Course", "Daytime.evening.attendance.",
+                       "Previous.qualification", "Nacionality", "Mother.s.qualification",
+                       "Father.s.qualification", "Mother.s.occupation", "Father.s.occupation", 
+                       "Displaced", "Educational.special.needs", "Debtor", "Tuition.fees.up.to.date", "Gender", "Scholarship.holder",
+                       "International", "Target")
+st_f <- studenciki
+st_f[columns_to_factor] <- lapply(st_f[columns_to_factor], factor)
+str(st_f)
+```
+```{r}
+#Podział na zbiór treningowy i testowy
+st_train_f <- st_f[train_index, -35]
+st_test_f <- st_f[test_index, -35]
+st_train_labels <- st_f[train_index, 35]
+st_test_labels <- st_f[test_index, 35]
+```
+
+
+```{r}
+#Predykcja
+tree_model <- C5.0(st_train_f, st_train_labels)
+tree_model
+summary(tree_model)
+```
+
+```{r}
+predict_tree <- predict(tree_model, st_test_f)
+CrossTable(predict_tree, st_test_labels, prop.chisq = FALSE, prop.c = FALSE, prop.r = FALSE, dnn = c("Predicted", "Actual"))
+
+accuracy_tree <- sum(as.numeric(predict_tree) == as.numeric(st_test_labels)) / length(st_test_labels)
+print(paste("Accuracy = ", accuracy_tree))
+```
+
+```{r}
+#Predykcja z użyciem wzmocnienia adaptacyjnego
+tree_model_boosted <- C5.0(st_train_f, st_train_labels, trials = 10)
+tree_model_boosted
+summary(tree_model_boosted)
+```
+```{r}
+predict_tree_boosted <- predict(tree_model_boosted, st_test_f)
+CrossTable(predict_tree_boosted, st_test_labels, prop.chisq = FALSE, prop.c = FALSE, prop.r = FALSE, dnn = c("Predicted", "Actual"))
+
+accuracy_tree_boosted <- sum(as.numeric(predict_tree_boosted) == as.numeric(st_test_labels)) / length(st_test_labels)
+print(paste("Accuracy = ", accuracy_tree_boosted))
+```
+
+
+...........NAIVE BAYES..............
+
+```{r}
+#Naive Bayes
+bayes_model <- naiveBayes(st_train_f, st_train_labels)
+bayes_model
+summary(bayes_model)
+
+```
+```{r}
+predict_bayes <- predict(bayes_model, st_test_f)
+CrossTable(predict_bayes, st_test_labels, prop.chisq = FALSE, prop.c = FALSE, prop.r = FALSE, dnn = c("Predicted", "Actual"))
+
+accuracy_bayes <- sum(as.numeric(predict_bayes) == as.numeric(st_test_labels)) / length(st_test_labels)
+print(paste("Accuracy = ", accuracy_bayes))
+```
+```{r}
+#Model z wykorzystaniem estymatora Laplace’a = 1
+bayes_model_lap <- naiveBayes(st_train_f, st_train_labels, laplace = 1)
+bayes_model_lap
+summary(bayes_model_lap)
+```
+```{r}
+predict_bayes_lap <- predict(bayes_model_lap, st_test_f)
+CrossTable(predict_bayes_lap, st_test_labels, prop.chisq = FALSE, prop.c = FALSE, prop.r = FALSE, dnn = c("Predicted", "Actual"))
+
+accuracy_bayes_lap <- sum(as.numeric(predict_bayes_lap) == as.numeric(st_test_labels)) / length(st_test_labels)
+print(paste("Accuracy = ", accuracy_bayes_lap))
+```
+
+
+
+
